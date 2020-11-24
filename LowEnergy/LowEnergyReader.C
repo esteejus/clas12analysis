@@ -41,11 +41,15 @@ void LowEnergyReader(){
     }
   }
   if(inputFile==TString())  {
-    std::cout << " *** please provide a file name..." << std::endl;
+   std::cout << " *** please provide a file name..." << std::endl;
     exit(0);
   }
   /////////////////////////////////////
 
+  TFile *cutf = TFile::Open("cuts.root");
+  TCutG *elec_cut = (TCutG *)cutf->Get("elec");
+  TCutG *ftof_p = (TCutG *)cutf->Get("ftof_p");
+  TCutG *ctof_p = (TCutG *)cutf->Get("ctof_p");
    
   cout<<"Analysing hipo file "<<inputFile<<endl;
 
@@ -77,16 +81,15 @@ void LowEnergyReader(){
   auto *missm_pmiss = new TH2F("missm_pmiss","Missing mass vs. pmiss",200,-1,4,100,0,4);
   auto *missm_xb = new TH2F("missm_xb","Missing mass vs. x_{B}",200,-1,4,100,0,4);
   auto *theta_pq_ratio = new TH2D("theta_pq_ratio","Theata pq vs p/q",50,0,1,50,0,50);
+  auto *q_dist=new TH1F("q_dist","#Q^2 distribution",1000,-1,18);
+
 
   auto *xbor=new TH1F("xBor","xBor",200,-1,10);   
 
   gBenchmark->Start("timer");
   int counter=0;
  
-  TFile *cutf = TFile::Open("cuts.root");
-  TCutG *elec_cut = (TCutG *)cutf->Get("elec");
-  TCutG *ftof_p = (TCutG *)cutf->Get("ftof_p");
-  TCutG *ctof_p = (TCutG *)cutf->Get("ctof_p");
+
   
   for(Int_t i=0;i<files->GetEntries();i++){
     //create the event reader
@@ -203,7 +206,7 @@ void LowEnergyReader(){
 	
 	TLorentzVector miss=beam+target-el-pr; //missing 4-vector
 	TLorentzVector q = beam - el;          //photon  4-vector
-	double x_b = -q.M2()/(2*pdg_db->GetParticle(2212)->Mass()*q.E() ); //x-borken
+	double x_b = q.Vect().Mag2()/(2*pdg_db->GetParticle(2212)->Mass()*q.E() ); //x-borken
 	double theta = pr.Vect().Angle(q.Vect()) * TMath::RadToDeg();  //angle between vectors p_miss and q
 
 
@@ -218,6 +221,7 @@ void LowEnergyReader(){
 	    missm_pmiss->Fill(miss.M(),miss.P());
 	    missm_xb->Fill(miss.M(),x_b);
 	    theta_pq_ratio->Fill(pr.Vect().Mag()/q.Vect().Mag(),theta);
+            q_dist->Fill(-q.Mag2());
 	  }
 
 	//could also get particle time etc. here too
@@ -264,7 +268,8 @@ void LowEnergyReader(){
   theta_pq_ratio->Draw("colz");
   
   TCanvas* can1 = new TCanvas();
-  pid_e_ec->Draw("colz");
+  q_dist->Draw();
+  
   /*
   can1->Divide(2,2);
   can1->cd(1);
