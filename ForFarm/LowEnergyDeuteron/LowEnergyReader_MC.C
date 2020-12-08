@@ -18,6 +18,7 @@
 
 using namespace clas12;
 
+
 bool pointsToBand(double theta,double phi,double z_m){
   double z = z_m*100; // from m to cm
 
@@ -61,13 +62,14 @@ bool pointsToBand(double theta,double phi,double z_m){
   return 0;
 }
 
+
 void SetLorentzVector(TLorentzVector &p4,clas12::region_part_ptr rp){
   p4.SetXYZM(rp->par()->getPx(),rp->par()->getPy(),
 	     rp->par()->getPz(),p4.M());
 
 }
 
-void LowEnergyReader(){
+void LowEnergyReader_MC(){
   // Record start time
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -88,7 +90,7 @@ void LowEnergyReader(){
     exit(0);
   }
   /////////////////////////////////////
-  outputFile = inputFile(inputFile.Index("inc_")+4,inputFile.Index(".hipo"));
+  outputFile = inputFile(inputFile.Index("recon_qe"),inputFile.Index(".hipo"));
 
   cout<<"Analysing hipo file "<<inputFile<<endl;
 
@@ -104,18 +106,20 @@ void LowEnergyReader(){
   double mass_p = pdg_db->GetParticle(2212)->Mass();
   double mass_n = pdg_db->GetParticle(2112)->Mass();
 
-  TLorentzVector beam(0,0,4.17179,4.17179);
-  TLorentzVector target(0,0,0, 1.8756129);
+  TLorentzVector beam(0,0,4.1,4.1);
+  TLorentzVector target(0,0,0,1.8756129);
   TLorentzVector el(0,0,0,mass_e);
   TLorentzVector pr(0,0,0,mass_p);
 
-  int counter=0;
+
   Double_t x_b = 0;
   Double_t x_prime = 0;
   Double_t theta = 0;
   Double_t p_q = 0;
   Double_t miss_m = 0;
   Double_t miss_p = 0;
+  Double_t miss_m_MC = 0;
+  Double_t miss_p_MC = 0;
   Double_t miss_pz = 0;
   Double_t q2 = 0;
   Double_t vz_diff = 0;
@@ -126,7 +130,8 @@ void LowEnergyReader(){
   Bool_t p_fd = false;
   Bool_t point_band = false;
 
-  TFile *tree_file = new TFile("/work/clas12/users/esteejus/output/LowEnergy/tree_"+outputFile+".root","RECREATE");
+
+  TFile *tree_file = new TFile("/work/clas12/users/esteejus/output/LowEnergyMC/MCtree_"+outputFile+".root","RECREATE");
 
   TTree *tree = new TTree("tree","Low Energy Data");
   tree->Branch("xb",&x_b,"xb/D");
@@ -135,12 +140,13 @@ void LowEnergyReader(){
   tree->Branch("p_q",&p_q,"p_q/D");
   tree->Branch("miss_m",&miss_m,"miss_m/D");
   tree->Branch("miss_p",&miss_p,"miss_p/D");
+  tree->Branch("miss_m_MC",&miss_m_MC,"miss_m_MC/D");
+  tree->Branch("miss_p_MC",&miss_p_MC,"miss_p_MC/D");
   tree->Branch("miss_pz",&miss_pz,"miss_pz/D");
   tree->Branch("q2",&q2,"q2/D");
   tree->Branch("vz_diff",&vz_diff,"vz_diff/D");
   tree->Branch("vz",&vz,"vz/D");
 
-  tree->Branch("counter",&counter,"counter/I");
   tree->Branch("ecal",&ecal,"ecal/B");
   tree->Branch("p_cd",&p_cd,"p_cd/B");
   tree->Branch("p_fd",&p_fd,"p_fd/B");
@@ -160,16 +166,16 @@ void LowEnergyReader(){
 
   auto *q_dist=new TH1F("q_dist","#Q^2 distribution",1000,-1,4);
   auto *theta_pq_ratio = new TH2D("theta_pq_ratio","Theata pq vs p/q",1000,0,2,1000,0,50);
+  auto *vz_corr = new TH1D("vz_corr","e_vz - p_vz",1000,-30,30);
   auto *theta_pmiss = new TH2D("theta_pmiss","Pmiss vs Theta",180,0,180,100,0,4);
   auto *theta_phi = new TH2D("theta_phi","Phi vs theta",180,0,180,360,-180,180);
-
-  auto *vz_corr = new TH1D("vz_corr","e_vz - p_vz",1000,-30,30);
 
   auto *vz_el_p = new TH2D("vz_el_p","vz_el_p",1000,-30,30,1000,-30,30);
 
   auto *xbor=new TH1F("xBor","xBor",200,-1,10);   
 
   gBenchmark->Start("timer");
+  int counter=0;
  
   TFile *cutf = TFile::Open("cuts_v1.root");
   TCutG *elec_cut = (TCutG *)cutf->Get("elec");
@@ -217,9 +223,7 @@ void LowEnergyReader(){
     //    c12.getRcdbVals();
 
     //c12.setEntries(1E3); //only process 1E3 events per file
-
     while(c12.next()==true){
-
 
       x_b = 0;
       x_prime = 0;
@@ -227,15 +231,18 @@ void LowEnergyReader(){
       p_q = 0;
       miss_m = 0;
       miss_p = 0;
+      miss_m_MC = 0;
+      miss_p_MC = 0;
       miss_pz = 0;
       q2 = 0;
       vz_diff = 0;
       vz = 0;
-      
+
       ecal = false;
       p_cd = false;
       p_fd = false;
       point_band = false;
+
 
       //can get an estimate of the beam current to this event
       //c12.getCurrApproxCharge();//if called c12.scalerReader();
@@ -290,6 +297,42 @@ void LowEnergyReader(){
 	p->cmat();
       }
 
+      //MC::Lund
+      // For the jth particle in the lund file
+      // 0:e , 1:p ,2:n in this Lund file
+      /*
+      c12.mcparts()->setEntry(2);
+      c12.mcparts()->getPid();
+      c12.mcparts()->getPx();
+      c12.mcparts()->getPy();
+      c12.mcparts()->getPz();
+      c12.mcparts()->getVx();
+      c12.mcparts()->getVy();
+      c12.mcparts()->getVz();
+      c12.mcparts()->getMass();
+      TVector3 mc_neutron(c12.mcparts()->getPx(), c12.mcparts()->getPy(),c12.mcparts()->getPz());
+      */
+
+      TLorentzVector el_MC;
+      el_MC.SetXYZM(c12.mcparts()->getPx(0),c12.mcparts()->getPy(0),c12.mcparts()->getPz(0), c12.mcparts()->getMass(0) );
+
+      TLorentzVector pr_MC;
+      pr_MC.SetXYZM(c12.mcparts()->getPx(1),c12.mcparts()->getPy(1),c12.mcparts()->getPz(1), c12.mcparts()->getMass(1) );
+
+      TLorentzVector miss_MC=beam+target-el_MC-pr_MC; //missing 4-vector
+
+      if(counter < 10)
+	{
+
+	  cout<<"el "<<c12.mcparts()->getPx(0)<<" "<< c12.mcparts()->getPy(0)<<" " << c12.mcparts()->getPz(0)<<" "<< c12.mcparts()->getMass(0)<<endl;
+
+	  cout<<"pr "<<c12.mcparts()->getPx(1)<<" "<< c12.mcparts()->getPy(1)<<" " << c12.mcparts()->getPz(1)<<" "<< c12.mcparts()->getMass(1)<<endl;
+
+	  cout<<"Lorentz "<< miss_MC.Px()<<" "<< miss_MC.Py()<<" "<< miss_MC.Pz()<<" "<< miss_MC.E()<<endl;
+
+	cout<<"mis mass "<<miss_MC.M()<<endl;
+
+	}
       // get particles by type
       auto electrons=c12.getByID(11);
       auto protons=c12.getByID(2212);
@@ -300,154 +343,155 @@ void LowEnergyReader(){
       //      if(protons.size()==1)
 	//	cout<< protons[0]->getRegion()<<endl;
 
-      if(electrons.size()==1 && protons.size()==1 )
-	{
+      if(electrons.size()==1 && protons.size()==1 ){
        
 
-	  //       	if(protons[0]->getRegion()==FD && !ftof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta()) )
-	  //	  continue;
-	  
-	  //	if( protons[0]->getRegion()==CD && ctof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta() )
-	  //	    continue;
-	  
-	  //	if( electronss[0]->getRegion()==FD && elec_cut ->IsInside(electrons[0]->par()->getP(),electrons[0]->cal(PCAL)->getEnergy()/electrons[0]-par()->getP() )
-	  //	    continue;
-	  
-	  double energy =  electrons[0]->cal(PCAL)->getEnergy() +  electrons[0]->cal(ECIN)->getEnergy() +  electrons[0]->cal(ECOUT)->getEnergy();
+	miss_m_MC = miss_MC.M();
+	miss_p_MC = miss_MC.P();
 
-	  if(protons[0]->getRegion()==FD)
-	    pid_p_fd -> Fill(protons[0]->par()->getP(),protons[0]->par()->getBeta() );
-	  
-	  if(protons[0]->getRegion()==CD)
-	    pid_p_cd -> Fill(protons[0]->par()->getP(),protons[0]->par()->getBeta() );
-	  
-	  if(electrons[0]->getRegion()==FD)
-	    pid_e_ec -> Fill(electrons[0]->par()->getP(), energy/electrons[0]->par()->getP());
-	  
-	  //	chi2_p->Fill(protons[0]->par()->getChi2Pid() );
-	  //	chi2_e->Fill(electrons[0]->par()->getChi2Pid() );
-	  
-	  // set the particle momentum
-	  SetLorentzVector(el,electrons[0]);
-	  SetLorentzVector(pr,protons[0]);
-	  TLorentzVector miss=beam+target-el-pr; //missing 4-vector
-	  TLorentzVector q = beam - el;          //photon  4-vector
-	  
-	  miss_p = miss.P();
-	  miss_pz = miss.Pz();
-	  miss_m = miss.M();
-	  q2 = -q.M2();
-	  x_prime = -q.M2()/(2 * miss.Dot(q) * (beam.E() - el.E()) ); //x-borken
-	  x_b = -q.M2()/(2 * mass_p * (beam.E() - el.E()) ); //x-borken
-	  theta = pr.Vect().Angle(q.Vect()) * TMath::RadToDeg();  //angle between vectors p_miss and q
-	  p_q = pr.Vect().Mag()/q.Vect().Mag();
-	  
-	  
-	  point_band = pointsToBand(miss.Vect().Theta(), miss.Vect().Phi(), electrons[0]->par()->getVz());
-	  p_fd = (protons[0]->getRegion()==FD && ftof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta()) );
-	  p_cd = (protons[0]->getRegion()==CD && ctof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta() ) );
-	  //	  ecal = (electrons[0]->getRegion()==FD && elec_cut ->IsInside(electrons[0]->par()->getP(), energy/electrons[0]->par()->getP()) );
-	  ecal = (electrons[0]->getRegion()==FD && (electrons[0]->par()->getP() < 4 && electrons[0]->par()->getP() > 1) && ( energy/electrons[0]->par()->getP() < .275 && energy/electrons[0]->par()->getP() > .175) );
-	  
-	  
-	  vz_diff = electrons[0]->par()->getVz() - protons[0]->par()->getVz();
-	  vz = electrons[0]->par()->getVz(); 
-	  double vz_diff_p = electrons[0]->par()->getVz() + protons[0]->par()->getVz() + 5.5;
-	  vz_corr->Fill(vz_diff);
-	  
-	  tree->Fill();
-	  
-	  //	if( (p_fd || p_cd) && ecal && x_b > 1.2 && abs(vz_diff) < 3 && (vz_diff_p > -10 && vz_diff_p < 10) )
-	  if( p_fd && ecal && miss.Pz() < 0 && abs(vz_diff) < 3 && (vz < -.5 && vz > -6) )
-	    {
-	      hmiss->Fill(miss.M() - mass_n);
-	      missm_pmiss->Fill(miss.M() - mass_n,miss.P());
-	      missm_xb->Fill(miss.M() - mass_n,x_b);
-	      q_dist->Fill(-q.M2());
-	      vz_el_p->Fill(protons[0]->par()->getVz(),electrons[0]->par()->getVz());
-	      theta_phi->Fill(miss.Theta()*TMath::RadToDeg(), miss.Phi()*TMath::RadToDeg());
-	      theta_pmiss->Fill(miss.Vect().Theta()*TMath::RadToDeg(), miss.P());
-	      theta_pq_ratio->Fill(p_q,theta);
-	    }
-	  
-	  //could also get particle time etc. here too
-	  //  eTime=electrons[0]->sci(FTOF1A)->getTime();
+	//       	if(protons[0]->getRegion()==FD && !ftof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta()) )
+	//	  continue;
 
-	}
-      
+	//	if( protons[0]->getRegion()==CD && ctof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta() )
+	   //	    continue;
+	    
+	//	if( electronss[0]->getRegion()==FD && elec_cut ->IsInside(electrons[0]->par()->getP(),electrons[0]->cal(PCAL)->getEnergy()/electrons[0]-par()->getP() )
+	   //	    continue;
+
+	double energy =  electrons[0]->cal(PCAL)->getEnergy() +  electrons[0]->cal(ECIN)->getEnergy() +  electrons[0]->cal(ECOUT)->getEnergy();
+
+	if(protons[0]->getRegion()==FD)
+	  pid_p_fd -> Fill(protons[0]->par()->getP(),protons[0]->par()->getBeta() );
+
+	if(protons[0]->getRegion()==CD)
+	  pid_p_cd -> Fill(protons[0]->par()->getP(),protons[0]->par()->getBeta() );
+
+	if(electrons[0]->getRegion()==FD)
+	  pid_e_ec -> Fill(electrons[0]->par()->getP(), electrons[0]->cal(PCAL)->getEnergy()/electrons[0]->par()->getP() );
+	  
+	//	chi2_p->Fill(protons[0]->par()->getChi2Pid() );
+	//	chi2_e->Fill(electrons[0]->par()->getChi2Pid() );
+	
+	// set the particle momentum
+	SetLorentzVector(el,electrons[0]);
+	SetLorentzVector(pr,protons[0]);
+	
+	TLorentzVector miss=beam+target-el-pr; //missing 4-vector
+       	TLorentzVector q = beam - el;          //photon  4-vector
+
+	miss_p = miss.P();
+	miss_m = miss.M();
+	miss_pz = miss.Pz();
+	q2 = -q.M2();
+	x_prime = -q.M2()/(2 * miss.Dot(q) * (beam.E() - el.E()) ); //x-borken              
+	x_b = -q.M2()/(2 * mass_p * (beam.E() - el.E()) ); //x-borken                        
+	theta = pr.Vect().Angle(q.Vect()) * TMath::RadToDeg();  //angle between vectors p_miss and q                                                                                  
+	p_q = pr.Vect().Mag()/q.Vect().Mag();
+
+	point_band = pointsToBand(miss.Vect().Theta(), miss.Vect().Phi(), electrons[0]->par()->getVz());
+	p_fd = (protons[0]->getRegion()==FD && ftof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta()) );
+	p_cd = (protons[0]->getRegion()==CD && ctof_p ->IsInside(protons[0]->par()->getP(),protons[0]->par()->getBeta() ) );
+	//	ecal = (electrons[0]->getRegion()==FD && elec_cut ->IsInside(electrons[0]->par()->getP(),electrons[0]->cal(PCAL)->getEnergy()/electrons[0]->par()->getP()) );
+
+	ecal = (electrons[0]->getRegion()==FD && (electrons[0]->par()->getP() < 4 && electrons[0]->par()->getP() > 1) && ( energy/electrons[0]->par()->getP() < .275 && energy/electrons[0]->par()->getP() > .175) );
+
+	vz_diff = electrons[0]->par()->getVz() - protons[0]->par()->getVz();
+	vz = electrons[0]->par()->getVz();
+	double vz_diff_p = electrons[0]->par()->getVz() + protons[0]->par()->getVz() + 5.5;
+	vz_corr->Fill(vz_diff);
+
+	tree->Fill();
+
+	//	if( (pcut_fd || pcut_cd) && ecut && x_b > 1.2 && abs(vz_diff) < 3 && (vz_diff_p > -10 && vz_diff_p < 10) )
+	if( p_fd && ecal && point_band && miss.Pz() < 0   )
+	  {
+	    hmiss->Fill(miss.M() - mass_n);
+	    missm_pmiss->Fill(miss.M() - mass_n,miss.P());
+	    missm_xb->Fill(miss.M() - mass_n,x_b);
+	    q_dist->Fill(-q.M2());
+	    vz_el_p->Fill(protons[0]->par()->getVz(),electrons[0]->par()->getVz());
+	    theta_phi->Fill(miss.Theta()*TMath::RadToDeg(), miss.Phi()*TMath::RadToDeg());
+	    theta_pmiss->Fill(miss.Vect().Theta()*TMath::RadToDeg(), miss.P());
+	    theta_pq_ratio->Fill(p_q,theta);
+	  }
+
+	//Double_t eTime=electrons[0]->sci(FTOF1A)->getTime();
+      }
+    
        
       counter++;
     }
-    
-    
-    gBenchmark->Stop("timer");
-    gBenchmark->Print("timer");
-    
-    theta_pq_ratio->GetYaxis()->SetTitle("#theta_{pq}");
-    theta_pq_ratio->GetXaxis()->SetTitle("|p|/|q|");
-    missm_pmiss->GetYaxis()->SetTitle("Missing mass (GeV)");
-    missm_pmiss->GetXaxis()->SetTitle("P_{miss} (GeV)");
-    pid_e_ec->GetYaxis()->SetTitle("E_{loss}/p");
-    pid_e_ec->GetXaxis()->SetTitle("p (GeV)");				
-    pid_p_fd->GetYaxis()->SetTitle("FD TOF");
-    pid_p_fd->GetXaxis()->SetTitle("p_{proton} (GeV)");				
-    pid_p_cd->GetYaxis()->SetTitle("CD TOF");
-    pid_p_cd->GetXaxis()->SetTitle("p_{proton} (GeV)");				
-    
-    theta_pq_ratio->GetYaxis()->CenterTitle();
-    theta_pq_ratio->GetXaxis()->CenterTitle();
-    missm_pmiss->GetYaxis()->CenterTitle();
-    missm_pmiss->GetXaxis()->CenterTitle();
-    pid_e_ec->GetYaxis()->CenterTitle();
-    pid_e_ec->GetXaxis()->CenterTitle();
-    pid_p_fd->GetYaxis()->CenterTitle();
-    pid_p_fd->GetXaxis()->CenterTitle();
-    pid_p_cd->GetYaxis()->CenterTitle();
-    pid_p_cd->GetXaxis()->CenterTitle();
-    
-    TCanvas* can = new TCanvas();
-    can->Divide(2,2);
-    can->cd(1);
-    missm_pmiss->Draw("colz");
-    can->cd(2);
-    missm_xb->Draw("colz");
-    can->cd(3);
-    //  theta_pq_ratio->Draw("colz");
-    q_dist->Draw();
-    
-    TCanvas* can1 = new TCanvas();
-    pid_e_ec->Draw("colz");
-    
 
-    tree_file->cd();
-    tree->Write();
+    //}
+  gBenchmark->Stop("timer");
+  gBenchmark->Print("timer");
 
-    TFile *out = new TFile("/work/clas12/users/esteejus/output/LowEnergy/hist_"+outputFile+".root","RECREATE");
-    hmiss->Write();
-    pid_e_ec->Write();
-    pid_p_fd->Write();
-    pid_p_cd->Write();
-    theta_pq_ratio->Write();
-    missm_pmiss->Write();
-    missm_xb->Write();
-    q_dist->Write();
-    vz_el_p->Write();
-    vz_corr->Write();
-    hbeam_e->Write();
-    theta_pmiss->Write();
-    theta_phi->Write();
+  theta_pq_ratio->GetYaxis()->SetTitle("#theta_{pq}");
+  theta_pq_ratio->GetXaxis()->SetTitle("|p|/|q|");
+  missm_pmiss->GetYaxis()->SetTitle("Missing mass (GeV)");
+  missm_pmiss->GetXaxis()->SetTitle("P_{miss} (GeV)");
+  pid_e_ec->GetYaxis()->SetTitle("E_{loss}/p");
+  pid_e_ec->GetXaxis()->SetTitle("p (GeV)");				
+  pid_p_fd->GetYaxis()->SetTitle("FD TOF");
+  pid_p_fd->GetXaxis()->SetTitle("p_{proton} (GeV)");				
+  pid_p_cd->GetYaxis()->SetTitle("CD TOF");
+  pid_p_cd->GetXaxis()->SetTitle("p_{proton} (GeV)");				
 
-    /*
-      can1->Divide(2,2);
-      can1->cd(1);
-      pid_p_fd->Draw("colz");
-      can1->cd(2);
-      pid_p_cd->Draw("colz");
-      can1->cd(3);
-      pid_e_ec->Draw("colz");
-    */
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "Elapsed time: " << elapsed.count()<< " events = "<<counter<< " s\n";
+  theta_pq_ratio->GetYaxis()->CenterTitle();
+  theta_pq_ratio->GetXaxis()->CenterTitle();
+  missm_pmiss->GetYaxis()->CenterTitle();
+  missm_pmiss->GetXaxis()->CenterTitle();
+  pid_e_ec->GetYaxis()->CenterTitle();
+  pid_e_ec->GetXaxis()->CenterTitle();
+  pid_p_fd->GetYaxis()->CenterTitle();
+  pid_p_fd->GetXaxis()->CenterTitle();
+  pid_p_cd->GetYaxis()->CenterTitle();
+  pid_p_cd->GetXaxis()->CenterTitle();
+
+  TCanvas* can = new TCanvas();
+  can->Divide(2,2);
+  can->cd(1);
+  missm_pmiss->Draw("colz");
+  can->cd(2);
+  missm_xb->Draw("colz");
+  can->cd(3);
+  //  theta_pq_ratio->Draw("colz");
+  q_dist->Draw();
+
+  TCanvas* can1 = new TCanvas();
+  theta_phi->Draw("colz");
+  //  theta_pmiss->Draw("colz");
+  //  pid_e_ec->Draw("colz");
+
+  tree_file->cd();
+  tree->Write();
+
+  TFile *out = new TFile("/work/clas12/users/esteejus/output/LowEnergyMC/hist_"+outputFile+".root","RECREATE");
+  hmiss->Write();
+  pid_e_ec->Write();
+  pid_p_fd->Write();
+  pid_p_cd->Write();
+  theta_pq_ratio->Write();
+  missm_pmiss->Write();
+  missm_xb->Write();
+  q_dist->Write();
+  vz_el_p->Write();
+  vz_corr->Write();
+  hbeam_e->Write();
+  theta_pmiss->Write();
+  theta_phi->Write();
+
+  /*
+  can1->Divide(2,2);
+  can1->cd(1);
+  pid_p_fd->Draw("colz");
+  can1->cd(2);
+  pid_p_cd->Draw("colz");
+  can1->cd(3);
+  pid_e_ec->Draw("colz");
+  */
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = finish - start;
+  std::cout << "Elapsed time: " << elapsed.count()<< " events = "<<counter<< " s\n";
 
 }

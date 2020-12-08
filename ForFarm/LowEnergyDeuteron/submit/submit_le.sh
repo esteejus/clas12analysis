@@ -4,7 +4,7 @@
 #SBATCH --mem-per-cpu=512
 #SBATCH --account=clas12
 #SBATCH --job-name=test
-#SBATCH --partition=priority
+#SBATCH --partition=production
 #SBATCH --mail-user=esteejus@mit.edu
 #SBATCH --time=2:00:00
 #SBATCH --output=/farm_out/%u/%x-%j-%N.out

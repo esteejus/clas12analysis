@@ -1,1 +1,6 @@
 *.hipo
+*ACLiC_dict*
+*~
+*.d
+*.so
+*.pcm
